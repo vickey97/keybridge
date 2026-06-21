@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="false"
+        android:label="KeyBridge">
+
+        <activity
+            android:name=".TrampolineActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+
+            <!-- These two actions are what the TCL gear / notification button fires.
+                 By handling them we get the button WITHOUT an accessibility service,
+                 so volume long-press is never touched. -->
+            <intent-filter>
+                <action android:name="android.app.action.TOGGLE_NOTIFICATION_HANDLER_PANEL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.app.action.OPEN_NOTIFICATION_HANDLER_PANEL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
