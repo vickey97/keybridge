@@ -7,21 +7,22 @@ import android.app.Service;
 import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
 /**
  * Foreground service that tails logcat for the line SystemUI prints when the gear /
- * notification button is pressed but has no system handler:
- *
- *   E/TvNotificationPanel: Not launching notification handler activity:
- *       Could not resolve activityInfo for intent ...TOGGLE_NOTIFICATION_HANDLER_PANEL
- *
- * When seen, we open the TCL Picture pane (android.settings.DISPLAY_SETTINGS) as an overlay.
+ * notification button is pressed with no system handler, then opens the Picture pane.
  * No accessibility service -> volume long-press is never touched.
+ *
+ * v3: verbose logging under tag "KeyBridge" + reads the full log (no tag filter) so we can
+ * see exactly where things break.
  */
 public class LogWatchService extends Service {
+
+    private static final String TAG = "KeyBridge";
 
     private volatile boolean running = false;
     private long serviceStart = 0L;
@@ -31,32 +32,39 @@ public class LogWatchService extends Service {
     public void onCreate() {
         super.onCreate();
         serviceStart = System.currentTimeMillis();
+        Log.i(TAG, "onCreate");
         goForeground();
     }
 
     private void goForeground() {
-        String chId = "keybridge";
-        Notification.Builder b;
-        if (Build.VERSION.SDK_INT >= 26) {
-            NotificationManager nm = getSystemService(NotificationManager.class);
-            if (nm != null) {
-                nm.createNotificationChannel(
-                        new NotificationChannel(chId, "KeyBridge", NotificationManager.IMPORTANCE_MIN));
+        try {
+            String chId = "keybridge";
+            Notification.Builder b;
+            if (Build.VERSION.SDK_INT >= 26) {
+                NotificationManager nm = getSystemService(NotificationManager.class);
+                if (nm != null) {
+                    nm.createNotificationChannel(
+                            new NotificationChannel(chId, "KeyBridge", NotificationManager.IMPORTANCE_MIN));
+                }
+                b = new Notification.Builder(this, chId);
+            } else {
+                b = new Notification.Builder(this);
             }
-            b = new Notification.Builder(this, chId);
-        } else {
-            b = new Notification.Builder(this);
+            Notification n = b
+                    .setContentTitle("KeyBridge")
+                    .setContentText("Gear button -> Picture pane")
+                    .setSmallIcon(android.R.drawable.ic_menu_preferences)
+                    .build();
+            startForeground(1, n);
+            Log.i(TAG, "goForeground ok");
+        } catch (Exception e) {
+            Log.e(TAG, "goForeground failed", e);
         }
-        Notification n = b
-                .setContentTitle("KeyBridge")
-                .setContentText("Gear button -> Picture pane")
-                .setSmallIcon(android.R.drawable.ic_menu_preferences)
-                .build();
-        startForeground(1, n);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.i(TAG, "onStartCommand running=" + running);
         if (!running) {
             running = true;
             Thread t = new Thread(this::watchLoop);
@@ -67,20 +75,29 @@ public class LogWatchService extends Service {
     }
 
     private void watchLoop() {
+        Log.i(TAG, "watchLoop begin");
         while (running) {
             Process p = null;
             try {
-                // -T 1 starts near "now" so we don't replay the whole history.
-                p = Runtime.getRuntime().exec(new String[]{
-                        "logcat", "-T", "1", "-v", "brief", "TvNotificationPanel:E", "*:S"});
+                Log.i(TAG, "exec logcat");
+                p = Runtime.getRuntime().exec(new String[]{"logcat", "-T", "1", "-v", "brief"});
                 BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()));
+                Log.i(TAG, "reader started");
+                boolean firstLogged = false;
                 String line;
                 while (running && (line = r.readLine()) != null) {
+                    if (!firstLogged) {
+                        Log.i(TAG, "first line read ok");
+                        firstLogged = true;
+                    }
                     if (line.contains("NOTIFICATION_HANDLER_PANEL")) {
+                        Log.i(TAG, "MATCH: " + line);
                         openPicturePane();
                     }
                 }
-            } catch (Exception ignored) {
+                Log.w(TAG, "logcat stream ended");
+            } catch (Exception e) {
+                Log.e(TAG, "logcat read error", e);
             } finally {
                 if (p != null) {
                     p.destroy();
@@ -90,18 +107,21 @@ public class LogWatchService extends Service {
                 try { Thread.sleep(1500); } catch (InterruptedException ignored) {}
             }
         }
+        Log.i(TAG, "watchLoop end");
     }
 
     private void openPicturePane() {
         long now = System.currentTimeMillis();
-        if (now - serviceStart < 3000) return; // ignore the historical line at startup
-        if (now - lastOpen < 700) return;      // debounce a burst of identical lines
+        if (now - serviceStart < 3000) { Log.i(TAG, "skip (startup grace)"); return; }
+        if (now - lastOpen < 700) { Log.i(TAG, "skip (debounce)"); return; }
         lastOpen = now;
         try {
             Intent i = new Intent("android.settings.DISPLAY_SETTINGS");
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(i);
-        } catch (Exception ignored) {
+            Log.i(TAG, "startActivity DISPLAY_SETTINGS issued");
+        } catch (Exception e) {
+            Log.e(TAG, "startActivity failed", e);
         }
     }
 
@@ -113,6 +133,7 @@ public class LogWatchService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        Log.i(TAG, "onDestroy");
         super.onDestroy();
     }
 }
