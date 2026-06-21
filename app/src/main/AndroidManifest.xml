@@ -1,28 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- READ_LOGS: granted via ADB. Lets us watch logcat for the gear-button line. -->
+    <uses-permission android:name="android.permission.READ_LOGS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- SYSTEM_ALERT_WINDOW (granted via ADB) exempts us from background-activity-launch limits,
+         so the service can open the Picture pane when the button is pressed. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <application
         android:allowBackup="false"
         android:label="KeyBridge">
 
-        <activity
-            android:name=".TrampolineActivity"
-            android:exported="true"
-            android:excludeFromRecents="true"
-            android:noHistory="true"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+        <service
+            android:name=".LogWatchService"
+            android:exported="false" />
 
-            <!-- These two actions are what the TCL gear / notification button fires.
-                 By handling them we get the button WITHOUT an accessibility service,
-                 so volume long-press is never touched. -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
             <intent-filter>
-                <action android:name="android.app.action.TOGGLE_NOTIFICATION_HANDLER_PANEL" />
-                <category android:name="android.intent.category.DEFAULT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.app.action.OPEN_NOTIFICATION_HANDLER_PANEL" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
+        </receiver>
     </application>
 </manifest>

@@ -1,35 +1,45 @@
 # KeyBridge
 
-Make Android TV / Google TV remote buttons open whatever you want — **without an accessibility
+Make an Android TV / Google TV remote button open whatever you want — **without an accessibility
 service**, so volume long-press and other system keys keep working normally.
 
-KeyBridge works by registering for the *system intents* that certain remote buttons fire. For
-example, on TCL the **gear / notification button** fires `TOGGLE_NOTIFICATION_HANDLER_PANEL`. When
-that button is pressed, the OS launches KeyBridge, which immediately opens your chosen target and
-gets out of the way.
+## How it works
+After you disable the Google TV launcher, the TCL **gear / notification button** still fires the
+system intent `TOGGLE_NOTIFICATION_HANDLER_PANEL`, but nothing handles it, so SystemUI logs:
 
-## Current behaviour (v1)
-- **Gear / notification button → Picture settings pane** (`android.settings.DISPLAY_SETTINGS`),
-  shown as an overlay so HDR / Dolby Vision picture modes stay live with on-screen preview.
+```
+E/TvNotificationPanel: Not launching notification handler activity:
+    Could not resolve activityInfo for intent ...TOGGLE_NOTIFICATION_HANDLER_PANEL
+```
 
-## Why no accessibility?
-Accessibility-based button mappers must filter *all* key events, which breaks volume hold-to-ramp on
-most TVs. KeyBridge never touches the key stream — it only answers a system intent — so volume is
-untouched.
+(SystemUI only accepts a *system* app as the handler, so a sideloaded app can't register directly.)
+
+KeyBridge runs a tiny foreground service that **watches logcat for that exact line** and, when it
+appears, opens the **Picture pane** (`android.settings.DISPLAY_SETTINGS`) as an overlay over whatever
+is playing — so HDR / Dolby Vision picture modes stay live with on-screen preview.
+
+Because it only reads logs (never filters key events), **volume hold-to-ramp is untouched.**
+
+## Permissions (granted once via ADB)
+```
+pm grant   com.bhumivivek.keybridge android.permission.READ_LOGS
+appops set com.bhumivivek.keybridge SYSTEM_ALERT_WINDOW allow
+```
+`READ_LOGS` lets it watch the log; `SYSTEM_ALERT_WINDOW` exempts it from background-activity-launch
+limits so it can open the pane. A `BootReceiver` restarts the service after reboots.
 
 ## Build (no local SDK needed)
-Push to GitHub → the **Build APK** workflow compiles `app-debug.apk` and uploads it as the
-`keybridge-apk` artifact. Download it from the workflow run.
+Push to GitHub → the **Build APK** workflow compiles `app-debug.apk` (artifact `keybridge-apk`).
 
-## Install
+## Install & start
 ```
 adb install -r app-debug.apk
+adb shell am start-foreground-service -n com.bhumivivek.keybridge/.LogWatchService
 ```
 
 ## Roadmap
-- Map additional remote buttons that expose system intents.
-- Optional, per-button log-watch mode for buttons that don't expose an intent.
-- Simple in-app picker for the target action.
+- Configurable target action (not just the Picture pane).
+- Support additional buttons / log signatures.
 
 ## License
 MIT
