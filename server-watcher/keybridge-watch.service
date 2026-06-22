@@ -1,0 +1,16 @@
+[Unit]
+Description=KeyBridge gear-button watcher (opens TCL Picture pane via ADB)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Edit these two for your setup:
+Environment=TV_ADDR=192.168.178.41:5555
+Environment=ADB_BIN=/usr/bin/adb
+ExecStart=/opt/keybridge/keybridge-watch.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
